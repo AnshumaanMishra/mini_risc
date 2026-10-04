@@ -161,10 +161,80 @@ tests.extend([
     {"name": "JAL (Jump and Link)", "asm": "li $15, 0\njal target\nnop\ntarget:\nli $1, 1", "reg": 15, "exp": 8},
     {"name": "JAL (Nested)", "asm": "jal target\nnop\ntarget:\njal func\nnop\nfunc:\nli $1, 1", "reg": 15, "exp": 12},
     {"name": "JR (Jump Register)", "asm": "jal target\nnop\nreturn:\nli $3, 100\nj end\ntarget:\nli $3, 0\nj $15\nend:\nnop", "reg": 3, "exp": 100},
-    {"name": "MUL (10 * 5)", "asm": "li $1, 10\nli $2, 5\nmul $3, $1, $2", "reg": 3, "exp": 50},
-    {"name": "MUL (0 * 5)", "asm": "li $1, 0\nli $2, 5\nmul $3, $1, $2", "reg": 3, "exp": 0},
-    {"name": "MULU (Positive)", "asm": "li $1, 10\nli $2, 5\nmulu $1, $2\nmflo $3", "reg": 3, "exp": 50},
-    {"name": "MULU (High Bits)", "asm": "lui $1, 1\nlui $2, 1\nmulu $1, $2\nmfhi $3", "reg": 3, "exp": 1}
+])
+
+
+# ==========================================
+# 5. MUL / MULU  (all operands are SIGNED 32-bit integers)
+# ==========================================
+#   MUL  rd, rs, rt : rd = low 32 bits of (rs * rt)
+#   MULU rs, rt     : {HI, LO} = full signed 64-bit product of (rs * rt)
+#                     (no GPR is written; read back with MFHI / MFLO)
+
+def s32(v):
+    v &= 0xFFFFFFFF
+    return v - (1 << 32) if v & 0x80000000 else v
+
+def load(reg, val):
+    """Emit asm that puts a 32-bit value (signed or raw) into $reg (li only has a 16-bit imm)."""
+    val = s32(val)
+    if -0x8000 <= val <= 0x7FFF:
+        return f"li ${reg}, {val}"
+    u = val & 0xFFFFFFFF
+    hi, lo = u >> 16, u & 0xFFFF
+    asm = f"lui ${reg}, {hex(hi)}"
+    if lo:
+        asm += f"\nori ${reg}, ${reg}, {lo}"
+    return asm
+
+MUL_CASES = [
+    ("0 * 5",              0,           5),
+    ("10 * 5",             10,          5),
+    ("-10 * 5",           -10,          5),
+    ("10 * -5",            10,         -5),
+    ("-10 * -5",          -10,         -5),
+    ("-1 * -1",           -1,          -1),
+    ("-1 * 2",            -1,           2),
+    ("MAX * MAX",          0x7FFFFFFF,  0x7FFFFFFF),
+    ("MIN * MIN",         -0x80000000, -0x80000000),
+    ("MIN * -1",          -0x80000000, -1),
+    ("MIN * 2",           -0x80000000,  2),
+    ("MAX * MIN",          0x7FFFFFFF, -0x80000000),
+    ("0x10000000 * 22",    0x10000000,  22),
+    ("0x10000000 * 0x1000",0x10000000,  0x1000),
+    ("0x12345678 * 0x10000", 0x12345678, 0x10000),
+    ("0x10000 * 0x10000",  0x10000,     0x10000),
+    ("-0x12345678 * 0x9ABC", -0x12345678, 0x9ABC),
+]
+
+for label, a, b in MUL_CASES:
+    prod = a * b
+    lo, hi = s32(prod), s32(prod >> 32)
+    pre = f"{load(1, a)}\n{load(2, b)}\n"
+    tests.append({"name": f"MUL ({label})",     "asm": pre + "mul $3, $1, $2",             "reg": 3, "exp": lo})
+    tests.append({"name": f"MULU ({label}) LO", "asm": pre + "mulu $1, $2\nmflo $3",      "reg": 3, "exp": lo})
+    tests.append({"name": f"MULU ({label}) HI", "asm": pre + "mulu $1, $2\nmfhi $3",      "reg": 3, "exp": hi})
+
+# --- Side-effect / routing checks ---
+tests.extend([
+    # MULU must not write a general-purpose register (only HI/LO)
+    {"name": "MULU leaves GPRs alone",
+     "asm": "li $1, 6\nli $2, 7\nli $3, 77\nmulu $1, $2\n", "reg": 3, "exp": 77},
+    {"name": "MULU leaves rs alone",
+     "asm": "li $1, 6\nli $2, 7\nmulu $1, $2\nmove $3, $1", "reg": 3, "exp": 6},
+    # MUL must not disturb HI/LO
+    {"name": "MUL leaves HI alone",
+     "asm": "li $1, -1\nli $2, 2\nmulu $1, $2\nli $4, 3\nmul $5, $4, $4\nmfhi $3", "reg": 3, "exp": -1},
+    {"name": "MUL leaves LO alone",
+     "asm": "li $1, -1\nli $2, 2\nmulu $1, $2\nli $4, 3\nmul $5, $4, $4\nmflo $3", "reg": 3, "exp": -2},
+    # HI/LO are overwritten by each MULU
+    {"name": "MULU overwrites HI",
+     "asm": "li $1, -1\nli $2, 2\nmulu $1, $2\nli $1, 3\nmulu $1, $2\nmfhi $3", "reg": 3, "exp": 0},
+    {"name": "MULU overwrites LO",
+     "asm": "li $1, -1\nli $2, 2\nmulu $1, $2\nli $1, 3\nmulu $1, $2\nmflo $3", "reg": 3, "exp": 6},
+    # MUL with rd == rs and rd == rt
+    {"name": "MUL rd == rs", "asm": "li $1, -7\nli $2, 6\nmul $1, $1, $2", "reg": 1, "exp": -42},
+    {"name": "MUL rd == rt", "asm": "li $1, -7\nli $2, 6\nmul $2, $1, $2", "reg": 2, "exp": -42},
 ])
 
 # --- Execute Suite ---

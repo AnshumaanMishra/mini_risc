@@ -245,14 +245,14 @@ module control_path (
             rt_sel = RTSELRT;
             next_state = RUN;
             case (fn_sel)
-              MUL: begin
-                is_multi = 1;
-                multi_cycles = 6'd32;
-              end
+              // MUL: begin
+              //   is_multi = 1;
+              //   multi_cycles = 6'd32;
+              // end
               MULU: begin
                 hi_lo_enable = 1;
-                is_multi = 1;
-                multi_cycles = 6'd32;
+                // is_multi = 1;
+                // multi_cycles = 6'd32;
               end
               default: ;
             endcase

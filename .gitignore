@@ -4,7 +4,28 @@ devenv.local.nix
 devenv.local.yaml
 
 # direnv
-.direnv
+.direnv/
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build artifacts
+/build/
+/assembler/build/
+/assembler/mini_asm
+
+# Simulation artifacts
+*.vvp
+*.vcd
+log.txt
+
+# Generated program memory
+/inputs/
+
+

@@ -230,7 +230,6 @@ module control_path (
           RTYPE: begin
             pc_enable = 1;
             ic_enable = 1;
-            reg_dst = REGDSTRD;
             hi_lo_enable = 0;
             reg_write = 1;
             alu_src = ALUSRCRT;
@@ -251,10 +250,11 @@ module control_path (
               // end
               MULU: begin
                 hi_lo_enable = 1;
+                reg_dst = REGDSTLO;
                 // is_multi = 1;
                 // multi_cycles = 6'd32;
               end
-              default: ;
+              default: reg_dst = REGDSTRD;
             endcase
           end
           ADDI, SUBI, ANDI, ORI, NORI, XORI, SLLI, SRLI, SRAI,
@@ -278,7 +278,7 @@ module control_path (
               ADDI: alu_func = ADD;
               SUBI: alu_func = SUB;
               ANDI: alu_func = AND;
-              ORI:  alu_func = OR;
+              ORI: alu_func = OR;
               NORI: alu_func = NOR;
               XORI: alu_func = XOR;
               SLLI: alu_func = SLL;

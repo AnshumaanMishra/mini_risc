@@ -28,6 +28,25 @@ module register_file (
     lo = 32'b0;
   end
 
+  // Read-only probes: Icarus does not dump unpacked arrays, so each register
+  // is mirrored on its own wire. run_tests.py reads r0..r15, hi and lo from the VCD.
+  wire [31:0] r0 = registers[0];
+  wire [31:0] r1 = registers[1];
+  wire [31:0] r2 = registers[2];
+  wire [31:0] r3 = registers[3];
+  wire [31:0] r4 = registers[4];
+  wire [31:0] r5 = registers[5];
+  wire [31:0] r6 = registers[6];
+  wire [31:0] r7 = registers[7];
+  wire [31:0] r8 = registers[8];
+  wire [31:0] r9 = registers[9];
+  wire [31:0] r10 = registers[10];
+  wire [31:0] r11 = registers[11];
+  wire [31:0] r12 = registers[12];
+  wire [31:0] r13 = registers[13];
+  wire [31:0] r14 = registers[14];
+  wire [31:0] r15 = registers[15];
+
   wire [3:0] rs_clipped, rt_clipped, rd_clipped;
   assign rs_clipped = rs[3:0];
   assign rt_clipped = rt[3:0];
@@ -55,10 +74,7 @@ module register_file (
 
   always @(posedge clk) begin
     if (reg_write) begin
-      // MAGIC HALT: A write of -1 to R0 terminates the simulation safely
-      if (rd == 5'b00000 && reg_in_lo == 32'hFFFF_FFFF) begin
-        $writememh("inputs/data_ram.mem", registers);
-        $finish;
+      if (rd == 5'b00000) begin
       end else if (hi_lo_enable) begin
         hi <= reg_in_hi;
         lo <= reg_in_lo;
@@ -66,12 +82,5 @@ module register_file (
         registers[rd_clipped] <= reg_in_lo;
       end
     end
-
-    // Continuously dump state for cycle-by-cycle debugging
-    $writememh("inputs/data_ram.mem", registers);
   end
 endmodule
-
-
-
-
